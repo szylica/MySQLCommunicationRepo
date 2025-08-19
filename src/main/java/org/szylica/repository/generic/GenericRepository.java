@@ -1,4 +1,4 @@
-package org.szylica.repository;
+package org.szylica.repository.generic;
 
 import java.util.List;
 import java.util.Optional;

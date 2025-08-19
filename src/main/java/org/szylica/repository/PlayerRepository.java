@@ -1,4 +1,7 @@
 package org.szylica.repository;
 
-public interface PlayerRepository {
+import org.szylica.model.Player;
+import org.szylica.repository.generic.GenericRepository;
+
+public interface PlayerRepository extends GenericRepository<Player, Long> {
 }
