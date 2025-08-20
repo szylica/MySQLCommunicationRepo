@@ -41,18 +41,17 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
 
     @Override
     public void insert(T entity) {
+        var nonNullFields = getNonNullFields(entity);
+        ;
+        if (nonNullFields.isEmpty()) {
+            throw new IllegalArgumentException("No fields to insert");
+        }
+        var sql = createInsertSql(nonNullFields);
 
-        var sql = "insert into %s ( %s ) values ( %s )".formatted(
-                tableName,
-                String.join(", ", getColumnNamesWithoutId()),
-                String.join(", ", getFieldPlaceholdersWithoutId())
-        );
-
-        System.out.println(sql);
 
         jdbi.useHandle(handle -> {
             var update = handle.createUpdate(sql);
-            bindFieldsToUpdate(entity, update);
+            bindFieldsToUpdate(entity, update, nonNullFields);
             update.execute();
         });
     }
@@ -60,30 +59,18 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
     @Override
     public void update(ID id, T entity) {
 
-        var setClause = fieldNamesWithoutId
-                .stream()
-                .filter(fieldName -> {
-                    try {
-                        var field = entityType.getDeclaredField(fieldName);
-                        field.setAccessible(true);
-                        return field.get(entity) != null;
-                    } catch (NoSuchFieldException | IllegalAccessException e) {
-                        throw new IllegalStateException(e);
-                    }
-                })
-                .map(fieldName -> getColumnName(fieldName) + " = :" + fieldName)
-                .collect(Collectors.joining(", "));
+        var nonNullFields = getNonNullFields(entity);
 
-        if (setClause.isEmpty()) {
+        if (nonNullFields.isEmpty()) {
             throw new IllegalArgumentException("No fields to update");
         }
 
-        var sql = "update %s set %s where id = :id".formatted(tableName, setClause);
+        var sql = createUpdateSql(nonNullFields);
         System.out.println(sql);
 
         jdbi.useHandle(handle -> {
                     var update = handle.createUpdate(sql);
-                    bindFieldsToUpdate(entity, update);
+                    bindFieldsToUpdate(entity, update, nonNullFields);
                     update.bind("id", id);
                     update.execute();
                 }
@@ -92,17 +79,32 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
 
     @Override
     public void delete(ID id) {
-
+        var sql = "delete  from %s where id = :id".formatted(tableName);
+        jdbi.useHandle(handle -> {
+                    var delete = handle.createUpdate(sql);
+                    delete.bind("id", id);
+                    delete.execute();
+                }
+        );
     }
 
     @Override
     public Optional<T> findById(ID id) {
-        return Optional.empty();
+        var sql = "select * from %s where id = :id".formatted(tableName);
+        return jdbi.withHandle(handle -> handle
+                .createQuery(sql)
+                .bind("id", id)
+                .mapToBean(entityType)
+                .findFirst());
     }
 
     @Override
-    public List<T> findAll(ID id) {
-        return List.of();
+    public List<T> findAll() {
+        var sql = "select * from %s".formatted(tableName);
+        return jdbi.withHandle(handle -> handle
+                .createQuery(sql)
+                .mapToBean(entityType)
+                .list());
     }
 
     private Class<?> getGenericTypeClass() {
@@ -139,8 +141,8 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
         return fieldColumnMap.getOrDefault(fieldName, fieldName);
     }
 
-    private void bindFieldsToUpdate(T entity, Update update) {
-        for (var fieldName : fieldNamesWithoutId) {
+    private void bindFieldsToUpdate(T entity, Update update, List<String> fields) {
+        for (var fieldName : fields) {
             try {
                 var field = entityType.getDeclaredField(fieldName);
                 field.setAccessible(true);
@@ -152,6 +154,44 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
                 throw new IllegalStateException(e);
             }
         }
+    }
+
+    private List<String> getNonNullFields(T entity) {
+        return fieldNamesWithoutId
+                .stream()
+                .filter(fieldName -> {
+                    try {
+                        var field = entityType.getDeclaredField(fieldName);
+                        field.setAccessible(true);
+                        return field.get(entity) != null;
+                    } catch (NoSuchFieldException | IllegalAccessException e) {
+                        throw new IllegalStateException(e);
+                    }
+                })
+                .toList();
+    }
+
+    private String createInsertSql(List<String> nonNullFields) {
+        var columnsNames = nonNullFields
+                .stream()
+                .map(this::getColumnName)
+                .collect(Collectors.joining(", "));
+
+        var placeholders = nonNullFields
+                .stream()
+                .map(fieldName -> ":" + fieldName)
+                .collect(Collectors.joining(", "));
+
+        return "insert into %s ( %s ) values ( %s )".formatted(tableName, columnsNames, placeholders);
+    }
+
+    private String createUpdateSql(List<String> nonNullFields) {
+        var setClause = nonNullFields
+                .stream()
+                .map(fieldName -> getColumnName(fieldName) + " = :" + fieldName)
+                .collect(Collectors.joining(", "));
+
+        return "update %s set %s".formatted(tableName, setClause);
     }
 
 }

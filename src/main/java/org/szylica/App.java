@@ -62,7 +62,7 @@ public class App
                 .points(10)
                 .build();
 
-        //teamRepository.insert(team);
+        teamRepository.insert(team);
 
         var player1 = Player.builder()
                 .name("Player 1")
@@ -73,7 +73,7 @@ public class App
                 .name("Player 2")
                 .goals(3)
                 .build();
-        //playerRepository.insert(player1);
+        playerRepository.insert(player1);
 
         playerRepository.update(5L, player2);
 
