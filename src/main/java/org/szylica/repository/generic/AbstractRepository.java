@@ -15,6 +15,10 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 
+
+/*
+
+ */
 public abstract class AbstractRepository<T, ID> implements GenericRepository<T, ID> {
 
     protected final Jdbi jdbi;
